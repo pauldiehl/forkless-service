@@ -48,6 +48,14 @@ export function buildTenantPrompt(tenant, opts = {}) {
 
     let prompt = buildSystemPrompt(config);
 
+    // Strip Driftboard/three-layer architecture references when board is not enabled
+    if (!boardSummary) {
+      prompt = prompt.replace(/## Architecture — Three Layers[\s\S]*?You are always on top\./m, '');
+      prompt = prompt.replace(/## User Context\n.*planning layer.*/gm, '');
+      prompt = prompt.replace(/- Reference card IDs when discussing board items.*\n?/g, '');
+      prompt = prompt.replace(/- Suggest board mode changes when contextually appropriate\n?/g, '');
+    }
+
     // Append tenant's custom system prompt
     if (tenant.system_prompt) {
       prompt += `\n\n## Tenant Knowledge\n${tenant.system_prompt}`;
