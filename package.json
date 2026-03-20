@@ -1,0 +1,26 @@
+{
+  "name": "forkless-service",
+  "version": "1.0.0",
+  "description": "Multi-tenant serverless Forkless — three-layer AI stack via script tag",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/**/*.test.mjs",
+    "validate": "sam validate",
+    "build": "sam build",
+    "deploy": "sam deploy --guided",
+    "local": "sam local start-api",
+    "seed": "node scripts/seed-tenant.mjs && node scripts/seed-board.mjs && node scripts/seed-faqs.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
+    "@aws-sdk/client-apigatewaymanagementapi": "^3.600.0",
+    "@aws-sdk/client-dynamodb": "^3.600.0",
+    "@aws-sdk/client-s3": "^3.1012.0",
+    "@aws-sdk/client-ses": "^3.600.0",
+    "@aws-sdk/lib-dynamodb": "^3.600.0",
+    "forkless": "file:../../forkless"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
