@@ -48,13 +48,19 @@ export function buildTenantPrompt(tenant, opts = {}) {
 
     let prompt = buildSystemPrompt(config);
 
-    // Strip Driftboard/three-layer architecture references when board is not enabled
+    // Strip Driftboard/board/planning layer references when board is not enabled
     if (!boardSummary) {
       prompt = prompt.replace(/## Architecture — Three Layers[\s\S]*?You are always on top\./m, '');
-      prompt = prompt.replace(/## User Context\n.*planning layer.*/gm, '');
-      prompt = prompt.replace(/- Reference card IDs when discussing board items.*\n?/g, '');
-      prompt = prompt.replace(/- Suggest board mode changes when contextually appropriate\n?/g, '');
+      prompt = prompt.replace(/## User Context\n[^#]*/m, '');
+      prompt = prompt.replace(/## Current Board State[\s\S]*?(?=\n##|$)/m, '');
+      prompt = prompt.replace(/.*(?:board|planning layer|Driftboard|card IDs|board mode).*\n?/gi, '');
     }
+
+    // Strip platform self-references — agent should only use the tenant brand name
+    const brandName = tenant.name || tenant.tenant_id;
+    prompt = prompt.replace(/\bon the Forkless platform\b/g, '');
+    prompt = prompt.replace(/\bForkless platform\b/g, brandName);
+    prompt = prompt.replace(/\bForkless\b/g, brandName);
 
     // Append tenant's custom system prompt
     if (tenant.system_prompt) {
@@ -91,7 +97,7 @@ Rules:
     // Onboarding intake — conditional on tenant flag
     if (tenant.intake_enabled) {
       prompt += `\n\n## Onboarding Intake
-You can onboard new users to the Forkless platform. When someone expresses interest in getting their own agent, collect these fields one or two at a time through natural conversation:
+You can onboard new users. When someone expresses interest in getting their own agent, collect these fields one or two at a time through natural conversation:
 
 1. Business/project name → suggest a URL-safe slug (lowercase-hyphens)
 2. Description (1-2 sentences — what should the agent help with?)
@@ -110,7 +116,7 @@ Keep each question to ONE sentence. Don't list all fields at once — ask natura
 
   // Minimal fallback prompt
   const sections = [];
-  sections.push(`You are the ${tenant.name || tenant.tenant_id} agent on the Forkless platform.`);
+  sections.push(`You are the ${tenant.name || tenant.tenant_id} agent.`);
 
   if (tenant.description) sections.push(tenant.description);
 
@@ -156,7 +162,7 @@ Rules:
   // Onboarding intake — conditional on tenant flag (fallback path)
   if (tenant.intake_enabled) {
     sections.push(`## Onboarding Intake
-You can onboard new users to the Forkless platform. When someone expresses interest in getting their own agent, collect these fields one or two at a time through natural conversation:
+You can onboard new users. When someone expresses interest in getting their own agent, collect these fields one or two at a time through natural conversation:
 
 1. Business/project name → suggest a URL-safe slug (lowercase-hyphens)
 2. Description (1-2 sentences — what should the agent help with?)

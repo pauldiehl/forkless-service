@@ -1415,7 +1415,12 @@
         setTimeout(poll, 15000);
       } else {
         hideTyping();
-        addSystemMessage('That took too long. Try a shorter question or start a new conversation.');
+        addSystemMessage('That took too long — starting a fresh conversation.');
+        // Clear conversation so next message starts clean
+        conversationId = null;
+        chatHistory = [];
+        localStorage.removeItem(`forkless_conv_${config.tenantId}`);
+        localStorage.removeItem(chatStorageKey());
         sendBtn.disabled = false;
       }
     };
