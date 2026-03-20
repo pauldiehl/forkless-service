@@ -152,6 +152,14 @@ export async function handler(event) {
     return clean;
   };
 
+  // 9b. Trim to last N messages to keep Claude input tokens low
+  const MAX_CONTEXT_MESSAGES = 10;
+  const trimmedMessages = sanitizeMessages(
+    conversation.messages.length > MAX_CONTEXT_MESSAGES
+      ? conversation.messages.slice(-MAX_CONTEXT_MESSAGES)
+      : conversation.messages
+  );
+
   // 10. Create agent and handle message
   let reply = '';
   let actions = [];
@@ -175,7 +183,7 @@ export async function handler(event) {
     // Override the prompt with our tenant-enriched version
     agent.reloadPrompt();
 
-    const result = await agent.handleMessage(conversation.messages);
+    const result = await agent.handleMessage(trimmedMessages);
     reply = result.text;
     actions = result.actions || [];
   } else {
@@ -187,7 +195,7 @@ export async function handler(event) {
       model: tenant.model || 'claude-sonnet-4-6',
       max_tokens: tenant.max_tokens || 1024,
       system: systemPrompt,
-      messages: sanitizeMessages(conversation.messages),
+      messages: trimmedMessages,
       tools: activeTools.length > 0 ? activeTools : undefined,
     });
 
