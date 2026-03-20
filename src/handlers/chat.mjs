@@ -137,7 +137,22 @@ export async function handler(event) {
     activeTools = activeTools.filter(t => !INTAKE_TOOLS.includes(t.name));
   }
 
-  // 9. Create agent and handle message
+  // 9. Sanitize messages: remove empty content, fix consecutive same-role
+  const sanitizeMessages = (msgs) => {
+    const clean = [];
+    for (const m of msgs) {
+      if (!m.content || (typeof m.content === 'string' && !m.content.trim())) continue;
+      const role = m.role === 'agent' ? 'assistant' : m.role;
+      if (clean.length > 0 && clean[clean.length - 1].role === role) {
+        clean[clean.length - 1].content += '\n' + m.content;
+      } else {
+        clean.push({ role, content: m.content });
+      }
+    }
+    return clean;
+  };
+
+  // 10. Create agent and handle message
   let reply = '';
   let actions = [];
 
@@ -148,7 +163,7 @@ export async function handler(event) {
         description: tenant.description || '',
         userType,
         model: tenant.model || 'claude-sonnet-4-6',
-        maxTokens: tenant.max_tokens || 4096,
+        maxTokens: tenant.max_tokens || 1024,
       },
       {
         tools: activeTools,
@@ -170,12 +185,9 @@ export async function handler(event) {
 
     const response = await anthropic.messages.create({
       model: tenant.model || 'claude-sonnet-4-6',
-      max_tokens: tenant.max_tokens || 4096,
+      max_tokens: tenant.max_tokens || 1024,
       system: systemPrompt,
-      messages: conversation.messages.map(m => ({
-        role: m.role === 'agent' ? 'assistant' : m.role,
-        content: m.content,
-      })),
+      messages: sanitizeMessages(conversation.messages),
       tools: activeTools.length > 0 ? activeTools : undefined,
     });
 

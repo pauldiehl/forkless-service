@@ -42,6 +42,63 @@
   let conversationId = null;
   let inputExpanded = false;
   let authEmail = '';
+  let chatHistory = []; // { role, text } pairs for localStorage persistence
+
+  // ─── Chat History Persistence ────────────────────────────────────
+
+  function chatStorageKey() {
+    return `forkless_chat_${config.tenantId}`;
+  }
+
+  function saveChatHistory() {
+    try {
+      localStorage.setItem(chatStorageKey(), JSON.stringify({
+        conversationId,
+        messages: chatHistory,
+      }));
+    } catch {}
+  }
+
+  function loadChatHistory() {
+    try {
+      const raw = localStorage.getItem(chatStorageKey());
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (saved.conversationId) conversationId = saved.conversationId;
+      if (Array.isArray(saved.messages) && saved.messages.length > 0) {
+        chatHistory = saved.messages;
+      }
+    } catch {}
+  }
+
+  function restoreChatToUI() {
+    if (chatHistory.length === 0) return;
+    const log = agentLayer.querySelector('#forkless-log');
+    const welcome = log.querySelector('#forkless-welcome');
+    if (welcome) welcome.remove();
+
+    for (const msg of chatHistory) {
+      const msgDiv = document.createElement('div');
+      msgDiv.className = `fk-message fk-${msg.role}`;
+
+      const avatar = document.createElement('div');
+      avatar.className = 'fk-msg-avatar';
+      if (msg.role === 'agent') {
+        avatar.innerHTML = ICON_CHAT_XS;
+      } else {
+        avatar.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+      }
+
+      const bubble = document.createElement('div');
+      bubble.className = 'fk-msg-bubble';
+      bubble.innerHTML = msg.role === 'agent' ? renderMarkdown(msg.text) : escHtml(msg.text);
+
+      msgDiv.appendChild(avatar);
+      msgDiv.appendChild(bubble);
+      log.appendChild(msgDiv);
+    }
+    log.scrollTop = log.scrollHeight;
+  }
 
   // ─── SVG Icons ──────────────────────────────────────────────────
 
@@ -100,10 +157,17 @@
       localStorage.removeItem(`forkless_token_${config.tenantId}`);
     }
 
+    // Load saved chat history
+    loadChatHistory();
+
     injectStyles();
     applyColorOverrides();
     createFAB();
     createAgentLayer();
+
+    // Restore previous messages into the UI
+    restoreChatToUI();
+
     if (config.boardEnabled) createBoardOverlay();
     applyMode(config.agentMode);
 
@@ -1041,8 +1105,8 @@
           updateAuthVisibility();
           addSystemMessage('Signed in successfully');
 
-          // Show greeting after auth
-          if (config.greeting) {
+          // Show greeting after auth (skip if restoring existing history)
+          if (config.greeting && chatHistory.length === 0) {
             setTimeout(() => addMessage('agent', config.greeting), 400);
           }
 
@@ -1175,6 +1239,10 @@
     msgDiv.appendChild(bubble);
     log.appendChild(msgDiv);
     log.scrollTop = log.scrollHeight;
+
+    // Persist to localStorage
+    chatHistory.push({ role, text });
+    saveChatHistory();
   }
 
   function addSystemMessage(text) {
@@ -1226,9 +1294,12 @@
       hideTyping();
 
       if (res.status === 401) {
-        // Token expired or invalid — re-auth
+        // Token expired or invalid — re-auth, clear chat history
         token = null;
+        chatHistory = [];
+        conversationId = null;
         localStorage.removeItem(`forkless_token_${config.tenantId}`);
+        localStorage.removeItem(chatStorageKey());
         authStep = 'email';
         const emailInput = agentLayer.querySelector('#fk-auth-email');
         const otpInput = agentLayer.querySelector('#fk-auth-otp');
@@ -1271,6 +1342,7 @@
         addMessage('agent', data.data.reply);
         conversationId = data.data.conversation_id || conversationId;
         localStorage.setItem(`forkless_conv_${config.tenantId}`, conversationId);
+        saveChatHistory(); // ensure conversationId is persisted with messages
 
         // Handle actions
         if (data.data.actions) handleActions(data.data.actions);

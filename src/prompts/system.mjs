@@ -67,7 +67,7 @@ export function buildTenantPrompt(tenant, opts = {}) {
 You are a domain-specific knowledge agent for ${tenant.name || tenant.tenant_id}. Your ONLY expertise is the content in the Knowledge and FAQ sections above.
 
 Rules:
-- If a question relates to your knowledge domain, answer from your knowledge. Be thorough and specific.
+- If a question relates to your knowledge domain, answer from your knowledge.
 - If a question uses a term that exists in your knowledge (e.g. a product name, concept name), ALWAYS interpret it in the context of your knowledge domain, never as a general term.
 - If a question is clearly outside your domain and has NO connection to your knowledge, say: "That's outside my expertise. I'm here to help with ${descShort}. What would you like to know?"
 - Never fabricate information not in your knowledge base.
@@ -139,7 +139,7 @@ Use tools to control board display, create cards, and generate artifacts.`);
 You are a domain-specific knowledge agent for ${tenant.name || tenant.tenant_id}. Your ONLY expertise is the content in the Knowledge and FAQ sections above.
 
 Rules:
-- If a question relates to your knowledge domain, answer from your knowledge. Be thorough and specific.
+- If a question relates to your knowledge domain, answer from your knowledge.
 - If a question uses a term that exists in your knowledge (e.g. a product name, concept name), ALWAYS interpret it in the context of your knowledge domain, never as a general term.
 - If a question is clearly outside your domain and has NO connection to your knowledge, say: "That's outside my expertise. I'm here to help with ${descShort}. What would you like to know?"
 - Never fabricate information not in your knowledge base.
