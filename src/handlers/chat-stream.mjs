@@ -37,34 +37,52 @@ export async function handler(event) {
     const Anthropic = (await import('@anthropic-ai/sdk')).default;
     const anthropic = new Anthropic();
 
+    // Sanitize messages: remove empty, fix consecutive same-role
+    const cleanMsgs = [];
+    for (const m of messages) {
+      if (!m.content || (typeof m.content === 'string' && !m.content.trim())) continue;
+      const role = m.role === 'agent' ? 'assistant' : m.role;
+      if (cleanMsgs.length > 0 && cleanMsgs[cleanMsgs.length - 1].role === role) {
+        cleanMsgs[cleanMsgs.length - 1].content += '\n' + m.content;
+      } else {
+        cleanMsgs.push({ role, content: m.content });
+      }
+    }
+
     // Stream the Claude response
     const stream = anthropic.messages.stream({
       model,
       max_tokens,
       system: system_prompt,
-      messages: messages.map(m => ({
-        role: m.role === 'agent' ? 'assistant' : m.role,
-        content: m.content,
-      })),
+      messages: cleanMsgs,
       tools: tools.length > 0 ? tools : undefined,
     });
 
     let fullText = '';
     let actions = [];
 
-    // Push token chunks via WebSocket
+    // Push token chunks via WebSocket — serialized to maintain order
+    let pushQueue = Promise.resolve();
+
     stream.on('text', (text) => {
       fullText += text;
-      pushToConnection(connection_id, {
-        channel: 'stream',
-        type: 'chunk',
-        conversation_id,
-        text,
-      }).catch(() => {});
+      pushQueue = pushQueue.then(() =>
+        pushToConnection(connection_id, {
+          channel: 'stream',
+          type: 'chunk',
+          conversation_id,
+          text,
+        })
+      ).catch(err => {
+        console.error(`Push chunk error: ${err.message}`);
+      });
     });
 
     // Wait for the complete message
     const finalMessage = await stream.finalMessage();
+
+    // Wait for all pushes to finish before continuing
+    await pushQueue;
 
     // Handle tool calls if any
     const toolUses = finalMessage.content.filter(b => b.type === 'tool_use');
@@ -116,20 +134,23 @@ export async function handler(event) {
       }
     }
 
-    // Save conversation with complete response
-    const conversation = await loadConversation(tenant_id, conversation_id);
-    if (conversation) {
-      conversation.messages.push({ role: 'assistant', content: fullText });
-      await saveConversation(conversation);
+    // Save conversation with complete response (skip empty)
+    if (fullText.trim()) {
+      const conversation = await loadConversation(tenant_id, conversation_id);
+      if (conversation) {
+        conversation.messages.push({ role: 'assistant', content: fullText });
+        await saveConversation(conversation);
+      }
     }
 
     // Signal stream end
-    await pushToConnection(connection_id, {
+    const endOk = await pushToConnection(connection_id, {
       channel: 'stream',
       type: 'end',
       conversation_id,
       actions,
     });
+    console.log(`Push stream_end: ok=${endOk}`);
 
     // Attempt FAQ crystallization
     const userMsg = messages[messages.length - 1]?.content || '';

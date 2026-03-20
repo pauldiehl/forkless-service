@@ -1329,6 +1329,7 @@
 
       const data = await res.json();
       if (data.data?.streaming) {
+        console.log('[forkless] Streaming mode, wsConnectionId:', wsConnectionId);
         // Streaming mode — tokens arrive via WebSocket
         conversationId = data.data.conversation_id || conversationId;
         localStorage.setItem(`forkless_conv_${config.tenantId}`, conversationId);
@@ -1455,10 +1456,14 @@
           // Connection ID response
           if (data.connection_id) {
             wsConnectionId = data.connection_id;
+            console.log('[forkless] WS connection_id:', wsConnectionId);
             return;
           }
 
           // Streaming token chunk
+          if (data.channel === 'stream') {
+            console.log('[forkless] Stream event:', data.type, data.text?.length || 0);
+          }
           if (data.channel === 'stream' && data.type === 'chunk') {
             hideTyping();
             if (!streamingBubble) {

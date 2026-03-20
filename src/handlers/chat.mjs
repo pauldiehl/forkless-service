@@ -178,6 +178,22 @@ export async function handler(event) {
   }
 
   // 10. Blocking mode — direct Claude call (fallback when no WS connection)
+
+  // Sanitize messages: remove empty content, fix consecutive same-role
+  const sanitizeMessages = (msgs) => {
+    const clean = [];
+    for (const m of msgs) {
+      if (!m.content || (typeof m.content === 'string' && !m.content.trim())) continue;
+      const role = m.role === 'agent' ? 'assistant' : m.role;
+      if (clean.length > 0 && clean[clean.length - 1].role === role) {
+        clean[clean.length - 1].content += '\n' + m.content;
+      } else {
+        clean.push({ role, content: m.content });
+      }
+    }
+    return clean;
+  };
+
   let reply = '';
   let actions = [];
 
@@ -212,10 +228,7 @@ export async function handler(event) {
       model: tenant.model || 'claude-sonnet-4-6',
       max_tokens: tenant.max_tokens || 4096,
       system: systemPrompt,
-      messages: conversation.messages.map(m => ({
-        role: m.role === 'agent' ? 'assistant' : m.role,
-        content: m.content,
-      })),
+      messages: sanitizeMessages(conversation.messages),
       tools: activeTools.length > 0 ? activeTools : undefined,
     });
 
