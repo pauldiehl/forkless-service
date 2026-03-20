@@ -6,6 +6,7 @@ const s3 = new S3Client({});
 
 const routes = {
   'POST /chat':              () => import('./handlers/chat.mjs'),
+  'GET /chat/status':        () => import('./handlers/chat-status.mjs'),
   'POST /auth/send-otp':     () => import('./handlers/auth/send-otp.mjs'),
   'POST /auth/verify-otp':   () => import('./handlers/auth/verify-otp.mjs'),
   'POST /auth/logout':       () => import('./handlers/auth/logout.mjs'),

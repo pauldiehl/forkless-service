@@ -1326,8 +1326,14 @@
       }
 
       if (res.status === 503 || res.status === 504) {
-        addSystemMessage('That took too long to process. Try a shorter or more specific question.');
-        sendBtn.disabled = false;
+        // Response is likely still generating — poll for it
+        if (conversationId) {
+          pollForResponse(chatHistory.length, sendBtn);
+        } else {
+          hideTyping();
+          addSystemMessage('That took too long to process. Try a shorter or more specific question.');
+          sendBtn.disabled = false;
+        }
         return;
       }
 
@@ -1362,6 +1368,45 @@
     }
 
     sendBtn.disabled = false;
+  }
+
+  // ─── 504 Rescue: Poll for async response ─────────────────────
+
+  function pollForResponse(msgCountBefore, sendBtn) {
+    addSystemMessage('Still thinking... I\'ll check back in a moment.');
+    let attempts = 0;
+    const MAX_ATTEMPTS = 4; // 4 x 15s = 60s max wait
+
+    const poll = async () => {
+      attempts++;
+      try {
+        const chatUrl = config.chatUrl || config.apiUrl;
+        const statusRes = await fetch(
+          `${chatUrl}/chat/status?tenant_id=${encodeURIComponent(config.tenantId)}&conversation_id=${encodeURIComponent(conversationId)}&after=${msgCountBefore}`,
+          { headers: { 'Authorization': `Bearer ${token}` } }
+        );
+        if (statusRes.ok) {
+          const statusData = await statusRes.json();
+          if (statusData.data?.ready && statusData.data?.reply) {
+            hideTyping();
+            addMessage('agent', statusData.data.reply);
+            saveChatHistory();
+            sendBtn.disabled = false;
+            return;
+          }
+        }
+      } catch {}
+
+      if (attempts < MAX_ATTEMPTS) {
+        setTimeout(poll, 15000);
+      } else {
+        hideTyping();
+        addSystemMessage('That took too long. Try a shorter question or start a new conversation.');
+        sendBtn.disabled = false;
+      }
+    };
+
+    setTimeout(poll, 15000);
   }
 
   function handleActions(actions) {
