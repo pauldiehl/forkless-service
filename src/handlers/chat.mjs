@@ -64,7 +64,7 @@ export async function handler(event) {
       // Authenticated: save Q&A into conversation for context continuity
       let conv;
       if (conversation_id) conv = await loadConversation(tenant_id, conversation_id);
-      if (!conv) conv = await createConv(tenant_id, faqUser.email);
+      if (!conv) conv = await createConv(tenant_id, faqUser.email, conversation_id);
       conv.messages.push({ role: 'user', content: message });
       conv.messages.push({ role: 'assistant', content: faqResult.answer });
       await saveConversation(conv);
@@ -97,7 +97,7 @@ export async function handler(event) {
     conversation = await loadConversation(tenant_id, conversation_id);
   }
   if (!conversation) {
-    conversation = await createConv(tenant_id, email);
+    conversation = await createConv(tenant_id, email, conversation_id);
   }
 
   // Add user message to history

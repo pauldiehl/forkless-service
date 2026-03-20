@@ -1276,6 +1276,13 @@
     const sendBtn = agentLayer.querySelector('#forkless-send-btn');
     sendBtn.disabled = true;
 
+    // Generate conversation ID client-side so we can poll on timeout
+    if (!conversationId) {
+      conversationId = crypto.randomUUID();
+      localStorage.setItem(`forkless_conv_${config.tenantId}`, conversationId);
+      saveChatHistory();
+    }
+
     try {
       const chatUrl = config.chatUrl || config.apiUrl;
       const res = await fetch(`${chatUrl}/chat`, {

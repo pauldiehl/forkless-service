@@ -9,10 +9,10 @@ import { getItem, putItem, queryItems } from './dynamo.mjs';
 /**
  * Create a new conversation.
  */
-export async function createConversation(tenantId, email) {
+export async function createConversation(tenantId, email, providedId) {
   const conversation = {
     tenant_id: tenantId,
-    conversation_id: randomUUID(),
+    conversation_id: providedId || randomUUID(),
     email: email || null,
     messages: [],
     created_at: new Date().toISOString(),
