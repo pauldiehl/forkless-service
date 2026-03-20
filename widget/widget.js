@@ -421,7 +421,6 @@
         font-size: 14px;
         line-height: 1.5;
         word-wrap: break-word;
-        white-space: pre-wrap;
       }
 
       .fk-message.fk-agent .fk-msg-bubble {
@@ -441,6 +440,25 @@
       }
 
       .fk-msg-bubble a:hover { opacity: 0.8; }
+
+      /* Markdown rendering inside message bubbles */
+      .fk-msg-bubble h1 { font-size: 18px; font-weight: 700; margin: 12px 0 6px; color: #fff; border-bottom: 1px solid var(--fk-border); padding-bottom: 4px; }
+      .fk-msg-bubble h2 { font-size: 16px; font-weight: 600; margin: 10px 0 5px; color: #f0f0f0; }
+      .fk-msg-bubble h3 { font-size: 15px; font-weight: 600; margin: 8px 0 4px; color: #e0e0e0; }
+      .fk-msg-bubble h4 { font-size: 14px; font-weight: 600; margin: 6px 0 3px; color: #d0d0d0; }
+      .fk-msg-bubble p { margin: 6px 0; }
+      .fk-msg-bubble ul, .fk-msg-bubble ol { padding-left: 20px; margin: 6px 0; }
+      .fk-msg-bubble li { margin: 2px 0; }
+      .fk-msg-bubble code { background: rgba(0,0,0,0.3); padding: 1px 5px; border-radius: 3px; font-family: 'Monaco','Menlo',monospace; font-size: 12px; color: #e06c75; }
+      .fk-msg-bubble pre { background: rgba(0,0,0,0.3); border: 1px solid var(--fk-border); border-radius: 6px; padding: 10px; margin: 8px 0; overflow-x: auto; white-space: pre-wrap; }
+      .fk-msg-bubble pre code { background: none; padding: 0; color: #d4d4d4; }
+      .fk-msg-bubble table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 13px; }
+      .fk-msg-bubble th, .fk-msg-bubble td { border: 1px solid var(--fk-border); padding: 5px 8px; text-align: left; }
+      .fk-msg-bubble th { background: rgba(0,0,0,0.3); font-weight: 600; }
+      .fk-msg-bubble tr:nth-child(even) { background: rgba(0,0,0,0.15); }
+      .fk-msg-bubble blockquote { border-left: 3px solid var(--fk-accent); padding: 6px 12px; margin: 8px 0; color: var(--fk-text-muted); background: rgba(0,0,0,0.15); border-radius: 0 4px 4px 0; }
+      .fk-msg-bubble hr { border: none; border-top: 1px solid var(--fk-border); margin: 12px 0; }
+      .fk-msg-bubble strong { color: #fff; }
 
       .fk-system-msg {
         text-align: center;
@@ -1151,7 +1169,7 @@
 
     const bubble = document.createElement('div');
     bubble.className = 'fk-msg-bubble';
-    bubble.innerHTML = linkifyText(text);
+    bubble.innerHTML = role === 'agent' ? renderMarkdown(text) : escHtml(text);
 
     msgDiv.appendChild(avatar);
     msgDiv.appendChild(bubble);
@@ -1392,12 +1410,71 @@
 
   // ─── Utilities ────────────────────────────────────────────────
 
-  function linkifyText(text) {
-    const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    return escaped.replace(
-      /(https?:\/\/[^\s<]+)/g,
-      '<a href="$1" target="_blank" rel="noopener">$1</a>'
+  // ─── Lightweight Markdown Renderer (from Forkless core) ────
+  function renderMarkdown(md) {
+    let html = escHtml(md);
+
+    // Code blocks (``` ... ```)
+    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) =>
+      `<pre><code>${code.trim()}</code></pre>`
     );
+
+    // Inline code
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+    // Headers
+    html = html.replace(/^#### (.+)$/gm, '<h4>$1</h4>');
+    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+
+    // Bold & italic
+    html = html.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+    // Blockquotes
+    html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
+
+    // Horizontal rules
+    html = html.replace(/^---$/gm, '<hr>');
+
+    // Links — [text](url)
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+
+    // Bare URLs
+    html = html.replace(/(?<!["=])(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+
+    // Tables
+    html = html.replace(/^(\|.+\|)\n(\|[-| :]+\|)\n((?:\|.+\|\n?)+)/gm, (_, header, sep, body) => {
+      const headers = header.split('|').filter(Boolean).map(h => `<th>${h.trim()}</th>`).join('');
+      const rows = body.trim().split('\n').map(row => {
+        const cells = row.split('|').filter(Boolean).map(c => `<td>${c.trim()}</td>`).join('');
+        return `<tr>${cells}</tr>`;
+      }).join('');
+      return `<table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>`;
+    });
+
+    // Unordered lists
+    html = html.replace(/^[-*] (.+)$/gm, '<li>$1</li>');
+    html = html.replace(/((?:<li>.*<\/li>\n?)+)/g, '<ul>$1</ul>');
+
+    // Ordered lists
+    html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+
+    // Paragraphs
+    html = html.split('\n\n').map(block => {
+      block = block.trim();
+      if (!block) return '';
+      if (/^<[a-z]/.test(block)) return block;
+      return `<p>${block}</p>`;
+    }).join('\n');
+
+    return html;
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
   function escapeHtml(str) {

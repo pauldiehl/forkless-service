@@ -286,7 +286,7 @@ Resources:
             CustomOriginConfig:
               OriginProtocolPolicy: https-only
               HTTPSPort: 443
-              OriginReadTimeout: 180
+              OriginReadTimeout: 60
               OriginKeepaliveTimeout: 60
         DefaultCacheBehavior:
           TargetOriginId: FunctionUrlOrigin
