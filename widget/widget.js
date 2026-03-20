@@ -1363,6 +1363,13 @@
         addSystemMessage(data.error);
       }
     } catch {
+      // Network error (likely CloudFront dropped the connection after 60s)
+      // If we have a conversation, the Lambda may still be running — poll for it
+      if (conversationId) {
+        hideTyping();
+        pollForResponse(chatHistory.length, sendBtn);
+        return;
+      }
       hideTyping();
       addSystemMessage('Connection error. Please check your internet and try again.');
     }
