@@ -71,6 +71,7 @@ Resources:
       Environment:
         Variables:
           INTAKE_WORKER_ARN: !GetAtt IntakeWorkerFunction.Arn
+          CHAT_STREAM_ARN: !GetAtt ChatStreamFunction.Arn
       Events:
         CatchAll:
           Type: HttpApi
@@ -119,7 +120,9 @@ Resources:
             - Effect: Allow
               Action:
                 - lambda:InvokeFunction
-              Resource: !GetAtt IntakeWorkerFunction.Arn
+              Resource:
+                - !GetAtt IntakeWorkerFunction.Arn
+                - !GetAtt ChatStreamFunction.Arn
 
   # ─── Intake Worker Lambda (async, no API Gateway) ──────
   IntakeWorkerFunction:
@@ -134,6 +137,35 @@ Resources:
             TableName: !Ref TenantsTable
         - DynamoDBCrudPolicy:
             TableName: !Ref FaqCacheTable
+
+  # ─── Chat Stream Worker (async, streams via WebSocket) ──
+  ChatStreamFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/chat-stream.handler
+      CodeUri: .
+      Timeout: 180
+      MemorySize: 512
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConversationsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TenantsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref FaqCacheTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConnectionsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BoardItemsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BoardCommentsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ArtifactsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*'
 
   # ─── Scheduler Lambda (EventBridge 5min) ────────────────
   SchedulerFunction:

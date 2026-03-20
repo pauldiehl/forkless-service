@@ -38,10 +38,12 @@
   let boardOverlay = null;
   let boardBadge = null;
   let ws = null;
+  let wsConnectionId = null;
   let token = null;
   let conversationId = null;
   let inputExpanded = false;
   let authEmail = '';
+  let streamingBubble = null;
 
   // ─── SVG Icons ──────────────────────────────────────────────────
 
@@ -935,6 +937,13 @@
         if (nameEl) nameEl.textContent = tenantName + ' Agent';
       }
 
+      // Auto-configure WebSocket from server
+      const wsUrl = data.data?.ws_url;
+      if (wsUrl && !config.wsUrl) {
+        config.wsUrl = wsUrl;
+        if (token) connectWebSocket();
+      }
+
       const faqs = data.data?.faqs || [];
       if (faqs.length === 0) return;
 
@@ -1177,6 +1186,57 @@
     log.scrollTop = log.scrollHeight;
   }
 
+  // ─── Streaming Message Rendering ──────────────────────────────
+
+  let streamingRawText = '';
+
+  function startStreamingMessage() {
+    const log = agentLayer.querySelector('#forkless-log');
+    const welcome = log.querySelector('#forkless-welcome');
+    if (welcome) welcome.remove();
+
+    streamingRawText = '';
+
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'fk-message fk-agent';
+    msgDiv.id = 'fk-streaming-msg';
+
+    const avatar = document.createElement('div');
+    avatar.className = 'fk-msg-avatar';
+    avatar.innerHTML = ICON_CHAT_XS;
+
+    const bubble = document.createElement('div');
+    bubble.className = 'fk-msg-bubble';
+
+    msgDiv.appendChild(avatar);
+    msgDiv.appendChild(bubble);
+    log.appendChild(msgDiv);
+    log.scrollTop = log.scrollHeight;
+
+    return bubble;
+  }
+
+  function appendToStreamingMessage(text) {
+    if (!streamingBubble) return;
+    streamingRawText += text;
+    // Re-render markdown on each chunk for proper formatting
+    streamingBubble.innerHTML = renderMarkdown(streamingRawText);
+    const log = agentLayer.querySelector('#forkless-log');
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function finalizeStreamingMessage() {
+    if (streamingBubble && streamingRawText) {
+      // Final markdown render
+      streamingBubble.innerHTML = renderMarkdown(streamingRawText);
+    }
+    streamingBubble = null;
+    streamingRawText = '';
+    // Remove the temporary ID
+    const el = agentLayer.querySelector('#fk-streaming-msg');
+    if (el) el.removeAttribute('id');
+  }
+
   function addSystemMessage(text) {
     const log = agentLayer.querySelector('#forkless-log');
     const msg = document.createElement('div');
@@ -1220,6 +1280,7 @@
           message: text,
           tenant_id: config.tenantId,
           conversation_id: conversationId,
+          connection_id: wsConnectionId || undefined,
         }),
       });
 
@@ -1267,6 +1328,14 @@
       }
 
       const data = await res.json();
+      if (data.data?.streaming) {
+        // Streaming mode — tokens arrive via WebSocket
+        conversationId = data.data.conversation_id || conversationId;
+        localStorage.setItem(`forkless_conv_${config.tenantId}`, conversationId);
+        // Keep typing indicator; WebSocket handler will manage the message
+        sendBtn.disabled = false;
+        return;
+      }
       if (data.data) {
         addMessage('agent', data.data.reply);
         conversationId = data.data.conversation_id || conversationId;
@@ -1373,13 +1442,48 @@
     try {
       ws = new WebSocket(`${config.wsUrl}?${params}`);
       ws.onopen = () => {
-        wsRetries = 0; // Reset on successful connect
+        wsRetries = 0;
         if (config.boardEnabled) ws.send(JSON.stringify({ action: 'subscribe', channel: 'board' }));
         ws.send(JSON.stringify({ action: 'subscribe', channel: 'agent' }));
+        // Request connection ID for streaming
+        ws.send(JSON.stringify({ action: 'identify' }));
       };
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+
+          // Connection ID response
+          if (data.connection_id) {
+            wsConnectionId = data.connection_id;
+            return;
+          }
+
+          // Streaming token chunk
+          if (data.channel === 'stream' && data.type === 'chunk') {
+            hideTyping();
+            if (!streamingBubble) {
+              streamingBubble = startStreamingMessage();
+            }
+            appendToStreamingMessage(data.text);
+            return;
+          }
+
+          // Stream complete
+          if (data.channel === 'stream' && data.type === 'end') {
+            finalizeStreamingMessage();
+            if (data.actions) handleActions(data.actions);
+            return;
+          }
+
+          // Stream error
+          if (data.channel === 'stream' && data.type === 'error') {
+            hideTyping();
+            finalizeStreamingMessage();
+            addSystemMessage(data.error || 'Something went wrong.');
+            return;
+          }
+
+          // Board updates
           if (data.channel === 'board') fetchBoard();
           if (data.channel === 'agent' && data.text) {
             addMessage('agent', data.text);

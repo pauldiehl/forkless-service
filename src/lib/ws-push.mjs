@@ -58,3 +58,30 @@ export async function broadcastToTenant(tenantId, channel, message) {
 
   await Promise.all(sends);
 }
+
+/**
+ * Push a message to a specific WebSocket connection.
+ * @param {string} connectionId - WebSocket connection ID
+ * @param {Object} message - Message payload
+ * @returns {boolean} true if sent, false if connection is stale
+ */
+export async function pushToConnection(connectionId, message) {
+  const client = await getApiGwClient();
+  if (!client) return false;
+
+  const { PostToConnectionCommand } = await import('@aws-sdk/client-apigatewaymanagementapi');
+  const payload = JSON.stringify(message);
+
+  try {
+    await client.send(new PostToConnectionCommand({
+      ConnectionId: connectionId,
+      Data: payload,
+    }));
+    return true;
+  } catch (err) {
+    if (err.statusCode === 410 || err.$metadata?.httpStatusCode === 410) {
+      await deleteItem('connections', { connection_id: connectionId });
+    }
+    return false;
+  }
+}

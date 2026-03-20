@@ -39,7 +39,7 @@ export async function handler(event) {
     return error('Invalid JSON', 'INVALID_JSON');
   }
 
-  const { message, tenant_id, conversation_id } = body;
+  const { message, tenant_id, conversation_id, connection_id } = body;
 
   if (!message) {
     return error('message is required', 'MISSING_MESSAGE');
@@ -137,7 +137,47 @@ export async function handler(event) {
     activeTools = activeTools.filter(t => !INTAKE_TOOLS.includes(t.name));
   }
 
-  // 9. Create agent and handle message
+  // 9. Streaming mode — if client has WebSocket connection, stream via async Lambda
+  const streamWorkerArn = process.env.CHAT_STREAM_ARN;
+  if (connection_id && streamWorkerArn) {
+    // Save conversation with user message before handing off
+    await saveConversation(conversation);
+
+    // Fire async stream worker
+    try {
+      const { LambdaClient, InvokeCommand } = await import('@aws-sdk/client-lambda');
+      const lambda = new LambdaClient({});
+      await lambda.send(new InvokeCommand({
+        FunctionName: streamWorkerArn,
+        InvocationType: 'Event', // fire-and-forget
+        Payload: JSON.stringify({
+          tenant_id,
+          email,
+          conversation_id: conversation.conversation_id,
+          connection_id,
+          system_prompt: systemPrompt,
+          messages: conversation.messages,
+          model: tenant.model || 'claude-sonnet-4-6',
+          max_tokens: tenant.max_tokens || 1024,
+          tools: activeTools,
+        }),
+      }));
+    } catch (err) {
+      console.error('Failed to invoke stream worker:', err.message);
+      // Fall through to blocking mode below
+    }
+
+    return success({
+      streaming: true,
+      conversation_id: conversation.conversation_id,
+      usage: {
+        remaining: CHAT_RATE_LIMIT - currentCount - 1,
+        limit: CHAT_RATE_LIMIT,
+      },
+    });
+  }
+
+  // 10. Blocking mode — direct Claude call (fallback when no WS connection)
   let reply = '';
   let actions = [];
 

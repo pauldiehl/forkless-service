@@ -19,5 +19,9 @@ export async function handler(event) {
     .filter(f => f.crystallized)
     .map(f => ({ question: f.question }));
 
-  return success({ faqs, tenant_name: tenant.name || tenantId });
+  // Derive client WebSocket URL from management API endpoint
+  const wsEndpoint = process.env.WS_ENDPOINT || '';
+  const wsUrl = wsEndpoint ? wsEndpoint.replace('https://', 'wss://') : null;
+
+  return success({ faqs, tenant_name: tenant.name || tenantId, ws_url: wsUrl });
 }

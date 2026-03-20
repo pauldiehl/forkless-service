@@ -16,6 +16,14 @@ export async function handler(event) {
   }
 
   const { action, channel } = body;
+
+  // Return connection ID for streaming support
+  if (action === 'identify') {
+    const { pushToConnection } = await import('../lib/ws-push.mjs');
+    await pushToConnection(connectionId, { connection_id: connectionId });
+    return { statusCode: 200, body: 'ok' };
+  }
+
   if (!channel) {
     return { statusCode: 400, body: 'channel required' };
   }
